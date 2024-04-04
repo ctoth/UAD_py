@@ -38,13 +38,19 @@ class TCPClient:
             asyncio.create_task(self.start())
 
     async def send_message(self, msg):
-        if not self.connected:
-            logger.error("Not connected to server.")
-            return
-        tcp_message = f"{msg}{self.MSG_SEPARATOR}"
-        self.writer.write(tcp_message.encode('utf-8'))
-        await self.writer.drain()
-        logger.debug(f"Sent: {tcp_message}")
+        try:
+            if not self.connected:
+                logger.error("Not connected to server.")
+                return
+            tcp_message = f"{msg}{self.MSG_SEPARATOR}"
+            self.writer.write(tcp_message.encode('utf-8'))
+            await self.writer.drain()
+            logger.debug(f"Sent: {tcp_message}")
+        except Exception as e:
+            logger.error(f"Failed to send message: {e}")
+            self.connected = False
+            self.connection_signal.send(connected=False)
+            asyncio.create_task(self.start())
 
     async def poll_for_response(self):
         while self.connected:
@@ -52,24 +58,35 @@ class TCPClient:
                 response = await self.reader.readuntil(separator=self.MSG_SEPARATOR.encode('utf-8'))
                 message = response.decode('utf-8').rstrip(self.MSG_SEPARATOR)
                 asyncio.create_task(self.handle_message(message))
-            except asyncio.IncompleteReadError:
-                logger.error("Incomplete read from server.")
-                self.connected = False
-                self.connection_signal.send(connected=False)
-                asyncio.create_task(self.start())
+            except asyncio.IncompleteReadError as e:
+                if e.partial:
+                    message = e.partial.decode('utf-8').rstrip(self.MSG_SEPARATOR)
+                    asyncio.create_task(self.handle_message(message))
+                logger.info("Server closed the connection.")
+                break
+            except asyncio.CancelledError:
+                logger.info("Polling for response cancelled.")
+                break
+            except Exception as e:
+                logger.error(f"Error while reading from server: {e}")
+                break
+        self.connected = False
+        self.connection_signal.send(connected=False)
+        asyncio.create_task(self.start())
 
-    async def handle_message(self, msg):
-        try:
-            message_data = json.loads(msg)
-            # Handle the message data as needed
-            logger.info(f"Received message: {message_data}")
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON parse error: {e}")
+    # The handle_message method should be updated to match the Swift client's handleMessage method.
+    # This includes parsing the message and handling different paths and data extraction.
+    # Please refer to the Swift code for the exact implementation details.
 
     async def start_keep_alive(self):
-        while self.connected:
-            await self.send_message("set /Sleep false")
-            await asyncio.sleep(self.KEEP_ALIVE_TIME)
+        try:
+            while self.connected:
+                await self.send_message("set /Sleep false")
+                await asyncio.sleep(self.KEEP_ALIVE_TIME)
+        except asyncio.CancelledError:
+            logger.info("Keep-alive cancelled.")
+        except Exception as e:
+            logger.error(f"Error in keep-alive: {e}")
 
     async def send_get_devices(self):
         await self.send_message("get /devices")
@@ -172,8 +189,13 @@ if __name__ == "__main__":
     def get_data_as_bool(self, json_data):
         try:
             json_dict = json.loads(json_data)
-            bool_data = json_dict.get("data", False)
-            return bool_data
+            data = json_dict.get("data", {})
+            if isinstance(data, bool):
+                return data
+            elif isinstance(data, dict) and 'value' in data:
+                return bool(data['value'])
+            else:
+                return False
         except json.JSONDecodeError as e:
             logger.error(f"JSON parse error: {e}")
             return False
