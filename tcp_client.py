@@ -283,14 +283,11 @@ class TCPClient:
                 elif len(json_path) == 2:
                     # -> /devices/id
                     dev_id = json_path[1]
-                    # Create a new Device instance
-                    self.devices[dev_id] = Device(dev_id)
-                    children_keys = self.get_json_children(msg) or []
-                    for child_id in children_keys:
-                        await self.send_get_device(child_id)
-                    children_keys = self.get_json_children(msg) or []
-                    for dev_id in children_keys:
-                        await self.send_get_device(dev_id)
+                    if dev_id not in self.devices:  # Create a new Device instance if it doesn't exist
+                        self.devices[dev_id] = Device(dev_id)
+                    # Update device properties
+                    self.devices[dev_id].update_properties(message_data['data'])
+                    await self.send_get_inputs(dev_id)
                 elif json_path[2] == 'DeviceOnline':
                     # -> /devices/id/DeviceOnline
                     dev_id = json_path[1]
