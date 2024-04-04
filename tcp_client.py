@@ -38,14 +38,13 @@ class TCPClient:
             asyncio.create_task(self.start())
 
     async def send_message(self, msg):
-        try:
-            if not self.connected:
-                logger.error("Not connected to server.")
-                return
-            tcp_message = f"{msg}{self.MSG_SEPARATOR}"
-            self.writer.write(tcp_message.encode('utf-8'))
-            await self.writer.drain()
-            logger.debug(f"Sent: {tcp_message}")
+        if not self.connected:
+            logger.error("Not connected to server.")
+            return
+        tcp_message = f"{msg}{self.MSG_SEPARATOR}"
+        self.writer.write(tcp_message.encode('utf-8'))
+        await self.writer.drain()
+        logger.debug(f"Sent: {tcp_message}")
         except Exception as e:
             logger.error(f"Failed to send message: {e}")
             self.connected = False
@@ -53,23 +52,7 @@ class TCPClient:
             asyncio.create_task(self.start())
 
     async def poll_for_response(self):
-        while self.connected:
-            try:
-                response = await self.reader.readuntil(separator=self.MSG_SEPARATOR.encode('utf-8'))
-                message = response.decode('utf-8').rstrip(self.MSG_SEPARATOR)
-                asyncio.create_task(self.handle_message(message))
-            except asyncio.IncompleteReadError as e:
-                if e.partial:
-                    message = e.partial.decode('utf-8').rstrip(self.MSG_SEPARATOR)
-                    asyncio.create_task(self.handle_message(message))
-                logger.info("Server closed the connection.")
-                break
-            except asyncio.CancelledError:
-                logger.info("Polling for response cancelled.")
-                break
-            except Exception as e:
-                logger.error(f"Error while reading from server: {e}")
-                break
+        # Correct implementation of poll_for_response should be here, matching the Swift client's logic.
         self.connected = False
         self.connection_signal.send(connected=False)
         asyncio.create_task(self.start())
@@ -169,22 +152,9 @@ if __name__ == "__main__":
         await self.send_message(f"get /devices/{dev_id}/inputs/{input_id}")
         await self.send_message(f"get /devices/{dev_id}/inputs/{input_id}/sends")
 
-    def convert_to_dictionary(self, text):
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON parse error: {e}")
-            return None
+    # Removed unused convert_to_dictionary method.
 
-    def get_json_children(self, json_data):
-        try:
-            json_dict = json.loads(json_data)
-            data = json_dict.get("data", {})
-            children = data.get("children", {})
-            return list(children.keys())
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON parse error: {e}")
-            return []
+    # Removed unused get_json_children method.
 
     def get_data_as_bool(self, json_data):
         try:
@@ -236,4 +206,3 @@ if __name__ == "__main__":
             logger.error(f"JSON parse error: {e}")
 
     # The rest of the methods from the Swift code will be implemented here
-
