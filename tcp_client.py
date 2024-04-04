@@ -102,9 +102,22 @@ if __name__ == "__main__":
         return value > 0
 
     async def send_update_message(self, mapping, value):
-        # This method will be implemented based on the Swift code's sendUpdateMessage
-        # It will use the mapping and value to construct and send the appropriate message
-        pass
+        mix = mapping['mix']
+        dev_id = mapping['deviceId']
+        input_id = mapping['inputId']
+        if mix == 'Inputs':
+            await self.send_volume_message(dev_id, input_id, value)
+        elif mix == 'Gain':
+            await self.send_gain_preamp_message(dev_id, input_id, value)
+        elif mix in ['Pad', 'Phase', 'LowCut', '48V']:
+            await self.send_bool_preamp_message(dev_id, input_id, mix, value)
+        elif mix in ['Solo', 'Mute']:
+            await self.send_bool_message(dev_id, input_id, mix, value)
+        elif mix.startswith('Send'):
+            send_id = mix[-1]
+            await self.send_gain_send_message(dev_id, input_id, send_id, value)
+        elif mix == 'Pan':
+            await self.send_float_message(dev_id, input_id, mix, value)
 
     async def send_bool_message(self, dev_id, input_id, property, value):
         await self.send_message(f"set /devices/{dev_id}/inputs/{input_id}/{property}/value {str(self.get_bool(value))}")
@@ -166,9 +179,39 @@ if __name__ == "__main__":
             return False
 
     async def handle_message(self, msg):
-        # This method will be implemented based on the Swift code's handleMessage
-        # It will parse the message and handle it accordingly
-        pass
+        try:
+            message_data = json.loads(msg)
+            json_path = message_data['path'].split('/')
+
+            if json_path[0] == 'devices':
+                if len(json_path) == 1:
+                    # -> /devices
+                    pass
+                elif len(json_path) == 2:
+                    # -> /devices/id
+                    children_keys = self.get_json_children(msg)
+                    for dev_id in children_keys:
+                        await self.send_get_device(dev_id)
+                elif json_path[2] == 'DeviceOnline':
+                    # -> /devices/id/DeviceOnline
+                    dev_id = json_path[1]
+                    online = self.get_data_as_bool(msg)
+                    # Signal device online status change
+                    self.connection_signal.send(device_id=dev_id, online=online)
+                elif json_path[2] == 'inputs':
+                    dev_id = json_path[1]
+                    if len(json_path) == 3:
+                        # -> /devices/id/inputs
+                        children_keys = self.get_json_children(msg)
+                        for input_id in children_keys:
+                            await self.send_get_input(dev_id, input_id)
+                    elif len(json_path) == 4:
+                        # -> /devices/id/inputs/id
+                        input_id = json_path[3]
+                        # Signal input information received
+                        self.connection_signal.send(device_id=dev_id, input_id=input_id, input_data=message_data)
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON parse error: {e}")
 
     # The rest of the methods from the Swift code will be implemented here
 
