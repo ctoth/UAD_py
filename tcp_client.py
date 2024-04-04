@@ -36,39 +36,48 @@ class Device:
         return self.inputs.get(input_id, None)
 
     def set_volume(self, volume):
-        self.client.start_task(self.client.send_volume_message(self.device_id, volume))
+        self.client.start_task(
+            self.client.send_volume_message(self.device_id, volume))
         self.volume = volume
 
     def set_mute(self, mute):
-        self.client.start_task(self.client.send_bool_message(self.device_id, "Mute", mute))
+        self.client.start_task(self.client.send_bool_message(
+            self.device_id, "Mute", mute))
         self.mute = mute
 
     def set_solo(self, solo):
-        self.client.start_task(self.client.send_bool_message(self.device_id, "Solo", solo))
+        self.client.start_task(self.client.send_bool_message(
+            self.device_id, "Solo", solo))
         self.solo = solo
 
     def set_pan(self, pan):
-        self.client.start_task(self.client.send_float_message(self.device_id, "Pan", pan))
+        self.client.start_task(
+            self.client.send_float_message(self.device_id, "Pan", pan))
         self.pan = pan
 
     def set_gain(self, gain):
-        self.client.start_task(self.client.send_gain_preamp_message(self.device_id, gain))
+        self.client.start_task(
+            self.client.send_gain_preamp_message(self.device_id, gain))
         self.gain = gain
 
     def set_phantom_power(self, phantom_power):
-        self.client.start_task(self.client.send_bool_preamp_message(self.device_id, "48V", phantom_power))
+        self.client.start_task(self.client.send_bool_preamp_message(
+            self.device_id, "48V", phantom_power))
         self.phantom_power = phantom_power
 
     def set_pad(self, pad):
-        self.client.start_task(self.client.send_bool_preamp_message(self.device_id, "Pad", pad))
+        self.client.start_task(
+            self.client.send_bool_preamp_message(self.device_id, "Pad", pad))
         self.pad = pad
 
     def set_phase(self, phase):
-        self.client.start_task(self.client.send_bool_preamp_message(self.device_id, "Phase", phase))
+        self.client.start_task(self.client.send_bool_preamp_message(
+            self.device_id, "Phase", phase))
         self.phase = phase
 
     def set_low_cut(self, low_cut):
-        self.client.start_task(self.client.send_bool_preamp_message(self.device_id, "LowCut", low_cut))
+        self.client.start_task(self.client.send_bool_preamp_message(
+            self.device_id, "LowCut", low_cut))
         self.low_cut = low_cut
 
 
@@ -198,7 +207,7 @@ class TCPClient:
                     # -> /devices/id
                     dev_id = json_path[1]
                     if dev_id not in self.devices:  # Create a new Device instance
-                        self.devices[dev_id] = Device(dev_id)
+                        self.devices[dev_id] = Device(dev_id, self)
                     self.devices[dev_id].update_properties(
                         message_data['data'])
                     await self.send_get_inputs(dev_id)
@@ -236,20 +245,6 @@ class TCPClient:
 
     async def send_get_devices(self):
         await self.send_message("get /devices")
-
-    def get_tapered_level(self, value):
-        tapered = value / 100
-        tapered = 1 / 1.27 * tapered
-        return tapered
-
-    def get_float_value(self, value):
-        floaty = value / 100
-        floaty = 2 / 1.27 * floaty
-        floaty = floaty - 1
-        return floaty
-
-    def get_bool(self, value):
-        return value > 0
 
     async def send_update_message(self, mapping, value):
         mix = mapping['mix']
@@ -315,57 +310,6 @@ class TCPClient:
         except json.JSONDecodeError as e:
             logger.error(f"JSON parse error: {e}")
             return None
-
-    async def handle_message(self, msg):
-        try:
-            message_data = json.loads(msg)
-            json_path = message_data['path'].split('/')
-
-            if json_path[0] == 'devices':
-                if len(json_path) == 1:  # -> /devices
-                    # -> /devices
-                    pass
-                elif len(json_path) == 2:
-                    # -> /devices/id
-                    dev_id = json_path[1]
-                    if dev_id not in self.devices:  # Create a new Device instance if it doesn't exist, passing self as client
-                        self.devices[dev_id] = Device(dev_id, self)
-                    # Update device properties
-                    self.devices[dev_id].update_properties(message_data['data'])
-                    await self.send_get_inputs(dev_id)
-                elif json_path[2] == 'DeviceOnline':
-                    # -> /devices/id/DeviceOnline
-                    dev_id = json_path[1]
-                    online = self.get_data_as_bool(msg)
-                    if online is None:
-                        logger.error(
-                            f"Invalid data for device online status: {msg}")
-                        return
-                    if dev_id in self.devices:
-                        # Update device online status
-                        self.devices[dev_id].set_online(online)
-                    # Signal device online status change
-                    self.connection_signal.send(
-                        device_id=dev_id, online=online)
-                elif json_path[2] == 'inputs':
-                    dev_id = json_path[1]
-                    if len(json_path) == 3:
-                        # -> /devices/id/inputs
-                        children_keys = self.get_json_children(message_data) or []
-                        for input_id in children_keys:
-                            await self.send_get_input(dev_id, input_id)
-                    elif len(json_path) == 4:
-                        # -> /devices/id/inputs/id
-                        input_id = json_path[3]
-                        if dev_id in self.devices:
-                            input_data = message_data['data']
-                            self.devices[dev_id].update_input(
-                                input_id, input_data)  # Update input properties
-                        # Signal input information received
-                        self.connection_signal.send(
-                            device_id=dev_id, input_id=input_id, input_data=message_data)
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON parse error: {e}")
 
     def get_tapered_level(self, value):
         tapered = value / 100
