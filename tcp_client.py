@@ -190,7 +190,7 @@ class TCPClient:
             return list(children.keys())
         except json.JSONDecodeError as e:
             logger.error(f"JSON parse error: {e}")
-            return []
+            return None
 
     async def start_keep_alive(self):
         while self.connected:
@@ -284,10 +284,10 @@ class TCPClient:
             elif isinstance(data, dict) and 'value' in data:
                 return bool(data['value'])
             else:
-                return False
+                return None
         except json.JSONDecodeError as e:
             logger.error(f"JSON parse error: {e}")
-            return False
+            return None
 
     async def handle_message(self, msg):
         try:
@@ -303,16 +303,19 @@ class TCPClient:
                     dev_id = json_path[1]
                     # Create a new Device instance
                     self.devices[dev_id] = Device(dev_id)
-                    children_keys = self.get_json_children(msg)
+                    children_keys = self.get_json_children(msg) or []
                     for child_id in children_keys:
                         await self.send_get_device(child_id)
-                    children_keys = self.get_json_children(msg)
+                    children_keys = self.get_json_children(msg) or []
                     for dev_id in children_keys:
                         await self.send_get_device(dev_id)
                 elif json_path[2] == 'DeviceOnline':
                     # -> /devices/id/DeviceOnline
                     dev_id = json_path[1]
-                    online = self.get_data_as_bool(msg)
+                    online = self.get_data_as_bool(msg) 
+                    if online is None:
+                        logger.error(f"Invalid data for device online status: {msg}")
+                        return
                     if dev_id in self.devices:
                         # Update device online status
                         self.devices[dev_id].set_online(online)
@@ -323,7 +326,7 @@ class TCPClient:
                     dev_id = json_path[1]
                     if len(json_path) == 3:
                         # -> /devices/id/inputs
-                        children_keys = self.get_json_children(msg)
+                        children_keys = self.get_json_children(msg) or []
                         for input_id in children_keys:
                             await self.send_get_input(dev_id, input_id)
                     elif len(json_path) == 4:
