@@ -192,42 +192,41 @@ class TCPClient:
         self.tasks.clear()
 
     async def handle_message(self, msg):
-        try:
-            message_data = json.loads(msg)
-            json_path = message_data['path'].split('/')
+        message_data = json.loads(msg)
+        json_path = message_data['path'].split('/')
+        if json_path[0] == 'devices':
+            if len(json_path) == 1:
+                await self.handle_devices_list(message_data)
+            elif len(json_path) == 2:
+                await self.handle_device(message_data, json_path[1])
+            elif len(json_path) > 2 and json_path[2] == 'DeviceOnline':
+                await self.handle_device_online(message_data, json_path[1])
+            elif len(json_path) > 3 and json_path[2] == 'inputs':
+                await self.handle_device_input(message_data, json_path[1], json_path[3])
 
-            if json_path[0] == 'devices':
-                if len(json_path) == 1:  # -> /devices
-                    # -> /devices
-                    # Handle the list of devices
-                    children_keys = message_data['data']['children'].keys()
-                    for dev_id in children_keys:
-                        await self.send_get_device(dev_id)
-                elif len(json_path) == 2:
-                    # -> /devices/id
-                    dev_id = json_path[1]
-                    if dev_id not in self.devices:  # Create a new Device instance
-                        self.devices[dev_id] = Device(dev_id, self)
-                    self.devices[dev_id].update_properties(
-                        message_data['data'])
-                    await self.send_get_inputs(dev_id)
-                elif json_path[2] == 'DeviceOnline':
-                    # -> /devices/id/DeviceOnline
-                    dev_id = json_path[1]
-                    # Update device online status
-                    online = message_data['data']
-                    if dev_id in self.devices:
-                        self.devices[dev_id].set_online(online)
-                elif json_path[2] == 'inputs' and len(json_path) == 4:
-                    # -> /devices/id/inputs/id
-                    dev_id = json_path[1]
-                    input_id = json_path[3]  # Update input properties
-                    if dev_id in self.devices:
-                        self.devices[dev_id].update_input(
-                            input_id, message_data['data'])
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON parse error: {e}")
+    async def handle_devices_list(self, message_data):
+        # Handle the list of devices
+        children_keys = message_data['data']['children'].keys()
+        for dev_id in children_keys:
+            await self.send_get_device(dev_id)
 
+    async def handle_device(self, message_data, dev_id):
+        # Handle device properties
+        if dev_id not in self.devices:  # Create a new Device instance
+            self.devices[dev_id] = Device(dev_id, self)
+        self.devices[dev_id].update_properties(message_data['data'])
+        await self.send_get_inputs(dev_id)
+
+    async def handle_device_online(self, message_data, dev_id):
+        # Handle device online status
+        online = message_data['data']
+        if dev_id in self.devices:
+            self.devices[dev_id].set_online(online)
+
+    async def handle_device_input(self, message_data, dev_id, input_id):
+        # Handle input properties
+        if dev_id in self.devices:
+            self.devices[dev_id].update_input(input_id, message_data['data'])
     # Helper method to extract children keys from message data
     def get_json_children(self, message_data):
         try:
