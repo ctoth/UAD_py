@@ -46,6 +46,12 @@ class TCPClient:
         self.connection_lock = asyncio.Lock()
         self.tasks = []  # List to keep track of tasks
 
+    def _task_done_callback(self, task):
+        """
+        Callback for when a task is done, to remove it from the tasks list.
+        """
+        self.tasks.remove(task)
+
     async def start(self):
         try:
             self.reader, self.writer = await asyncio.open_connection(self.host, self.port)
@@ -63,6 +69,15 @@ class TCPClient:
             self.connection_signal.send(connected=False)
             await asyncio.sleep(self.RECONNECT_TIME)
             self.tasks.append(asyncio.create_task(self.start()))
+
+    def create_task(self, coro):
+        """
+        Create an asyncio task and add it to the tasks list with a done callback.
+        """
+        task = asyncio.create_task(coro)
+        task.add_done_callback(self._task_done_callback)
+        self.tasks.append(task)
+        return task
 
     async def send_message(self, msg):
         async with self.connection_lock:
@@ -116,7 +131,8 @@ class TCPClient:
         self.connection_signal.send(connected=False)
         async for task in self.tasks:
             try:
-                await task.cancel()
+                task.cancel()
+                await task
             except Exception as e:
                 logger.error(f"Error while cancelling task: {e}")
         self.tasks.clear()
