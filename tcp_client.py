@@ -258,3 +258,67 @@ if __name__ == "__main__":
 
     # ... rest of the TCPClient class ...
     # The rest of the methods from the Swift code will be implemented here
+    def get_tapered_level(self, value):
+        tapered = value / 100
+        tapered = 1 / 1.27 * tapered
+        return tapered
+
+    def get_float_value(self, value):
+        floaty = value / 100
+        floaty = 2 / 1.27 * floaty
+        floaty = floaty - 1
+        return floaty
+
+    def get_bool(self, value):
+        return value > 0
+
+    async def send_update_message(self, mapping, value):
+        mix = mapping['mix']
+        dev_id = mapping['deviceId']
+        input_id = mapping['inputId']
+        if mix == 'Inputs':
+            await self.send_volume_message(dev_id, input_id, value)
+        elif mix == 'Gain':
+            await self.send_gain_preamp_message(dev_id, input_id, value)
+        elif mix in ['Pad', 'Phase', 'LowCut', '48V']:
+            await self.send_bool_preamp_message(dev_id, input_id, mix, value)
+        elif mix in ['Solo', 'Mute']:
+            await self.send_bool_message(dev_id, input_id, mix, value)
+        elif mix.startswith('Send'):
+            send_id = mix[-1]
+            await self.send_gain_send_message(dev_id, input_id, send_id, value)
+        elif mix == 'Pan':
+            await self.send_float_message(dev_id, input_id, mix, value)
+
+    async def send_bool_message(self, dev_id, input_id, property, value):
+        await self.send_message(f"set /devices/{dev_id}/inputs/{input_id}/{property}/value {str(self.get_bool(value))}")
+
+    async def send_bool_preamp_message(self, dev_id, input_id, property, value):
+        await self.send_message(f"set /devices/{dev_id}/inputs/{input_id}/preamps/0/{property}/value {str(self.get_bool(value))}")
+
+    async def send_gain_send_message(self, dev_id, input_id, send_id, value):
+        tapered_level = self.get_tapered_level(value)
+        await self.send_message(f"set /devices/{dev_id}/inputs/{input_id}/sends/{send_id}/GainTapered/value {tapered_level:.6f}")
+
+    async def send_gain_preamp_message(self, dev_id, input_id, value):
+        tapered_level = self.get_tapered_level(value)
+        await self.send_message(f"set /devices/{dev_id}/inputs/{input_id}/preamps/0/GainTapered/value {tapered_level:.6f}")
+
+    async def send_volume_message(self, dev_id, input_id, value):
+        tapered_level = self.get_tapered_level(value)
+        await self.send_message(f"set /devices/{dev_id}/inputs/{input_id}/FaderLevelTapered/value {tapered_level:.6f}")
+
+    async def send_float_message(self, dev_id, input_id, property, value):
+        float_value = self.get_float_value(value)
+        await self.send_message(f"set /devices/{dev_id}/inputs/{input_id}/{property}/value {float_value:.6f}")
+
+    async def send_get_device(self, dev_id):
+        await self.send_message(f"get /devices/{dev_id}")
+        await self.send_message(f"subscribe /devices/{dev_id}/DeviceOnline")
+
+    async def send_get_inputs(self, dev_id):
+        await self.send_message(f"get /devices/{dev_id}/inputs")
+
+    async def send_get_input(self, dev_id, input_id):
+        await self.send_message(f"get /devices/{dev_id}/inputs/{input_id}")
+        await self.send_message(f"get /devices/{dev_id}/inputs/{input_id}/sends")
