@@ -52,24 +52,34 @@ class TCPClient:
             asyncio.create_task(self.start())
 
     async def poll_for_response(self):
-        # Correct implementation of poll_for_response should be here, matching the Swift client's logic.
-        self.connected = False
-        self.connection_signal.send(connected=False)
-        asyncio.create_task(self.start())
+        while self.connected:
+            try:
+                response = await self.reader.readuntil(separator=self.MSG_SEPARATOR.encode('utf-8'))
+                message = response.decode('utf-8').rstrip(self.MSG_SEPARATOR)
+                asyncio.create_task(self.handle_message(message))
+            except asyncio.IncompleteReadError:
+                logger.info("Server closed the connection.")
+                self.connected = False
+                self.connection_signal.send(connected=False)
+                break
+            except asyncio.CancelledError:
+                logger.info("Polling for response cancelled.")
+                break
+            except Exception as e:
+                logger.error(f"Error while reading from server: {e}")
+                self.connected = False
+                self.connection_signal.send(connected=False)
+                break
+            await asyncio.sleep(self.SLEEP_TIME)
 
     # The handle_message method should be updated to match the Swift client's handleMessage method.
     # This includes parsing the message and handling different paths and data extraction.
     # Please refer to the Swift code for the exact implementation details.
 
     async def start_keep_alive(self):
-        try:
-            while self.connected:
-                await self.send_message("set /Sleep false")
-                await asyncio.sleep(self.KEEP_ALIVE_TIME)
-        except asyncio.CancelledError:
-            logger.info("Keep-alive cancelled.")
-        except Exception as e:
-            logger.error(f"Error in keep-alive: {e}")
+        while self.connected:
+            await self.send_message("set /Sleep false")
+            await asyncio.sleep(self.KEEP_ALIVE_TIME)
 
     async def send_get_devices(self):
         await self.send_message("get /devices")
