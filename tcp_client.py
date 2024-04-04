@@ -42,35 +42,8 @@ class TCPClient:
         self.writer = None
         self.devices = {}  # Track devices by their IDs
         self.connection_signal = signal('connection_change')
-        self.tasks = []  # List to keep track of tasks
-
-    def __init__(self, host, port):
-        self.host = host
-        self.port = port
-        self.connected = False
-        self.approved = None
-        self.reader = None
-        self.writer = None
-        self.devices = {}  # Track devices by their IDs
-        self.connection_signal = signal('connection_change')
-
-class TCPClient:
-    RECONNECT_TIME = 3
-    KEEP_ALIVE_TIME = 3
-    SLEEP_TIME = 3
-    USLEEP_TIME = 0.01
-    MSG_SEPARATOR = '\x00'
-
-    def __init__(self, host, port):
-        self.host = host
-        self.port = port
-        self.connected = False
-        self.approved = None
-        self.reader = None
-        self.writer = None
-        self.devices = {}  # Track devices by their IDs
-        self.connection_signal = signal('connection_change')
-        self.connection_lock = asyncio.Lock()  # Lock for thread-safe operations on `self.connected`
+        # Lock for thread-safe operations on `self.connected`
+        self.connection_lock = asyncio.Lock()
         self.tasks = []  # List to keep track of tasks
 
     async def start(self):
@@ -96,8 +69,6 @@ class TCPClient:
             if not self.connected:
                 logger.error("Not connected to server.")
                 return
-            logger.error("Not connected to server.")
-            return
         tcp_message = f"{msg}{self.MSG_SEPARATOR}"
         try:
             self.writer.write(tcp_message.encode('utf-8'))
@@ -136,16 +107,20 @@ class TCPClient:
                 break
             await asyncio.sleep(self.SLEEP_TIME)
 
-    def close(self):
+    async def close(self):
         if self.writer:
             self.writer.close()
             asyncio.create_task(self.writer.wait_closed())
         async with self.connection_lock:
             self.connected = False
         self.connection_signal.send(connected=False)
-        for task in self.tasks:
-            task.cancel()
+        async for task in self.tasks:
+            try:
+                await task.cancel()
+            except Exception as e:
+                logger.error(f"Error while cancelling task: {e}")
         self.tasks.clear()
+
     async def handle_message(self, msg):
         try:
             message_data = json.loads(msg)
@@ -169,7 +144,8 @@ class TCPClient:
                 elif json_path[2] == 'DeviceOnline':
                     # -> /devices/id/DeviceOnline
                     dev_id = json_path[1]
-                    online = message_data['data']  # Update device online status
+                    # Update device online status
+                    online = message_data['data']
                     if dev_id in self.devices:
                         self.devices[dev_id].set_online(online)
                 elif json_path[2] == 'inputs' and len(json_path) == 4:
@@ -182,7 +158,7 @@ class TCPClient:
         except json.JSONDecodeError as e:
             logger.error(f"JSON parse error: {e}")
 
-    # Helper method to extract children keys from message data 
+    # Helper method to extract children keys from message data
     def get_json_children(self, message_data):
         try:
             data = json.loads(message_data)
@@ -199,16 +175,6 @@ class TCPClient:
 
     async def send_get_devices(self):
         await self.send_message("get /devices")
-
-    def close(self):
-        if self.writer:
-            self.writer.close()
-            asyncio.create_task(self.writer.wait_closed())
-        self.connected = False
-        self.connection_signal.send(connected=False)
-        for task in self.tasks:
-            task.cancel()
-        self.tasks.clear() 
 
     def get_tapered_level(self, value):
         tapered = value / 100
@@ -312,9 +278,10 @@ class TCPClient:
                 elif json_path[2] == 'DeviceOnline':
                     # -> /devices/id/DeviceOnline
                     dev_id = json_path[1]
-                    online = self.get_data_as_bool(msg) 
+                    online = self.get_data_as_bool(msg)
                     if online is None:
-                        logger.error(f"Invalid data for device online status: {msg}")
+                        logger.error(
+                            f"Invalid data for device online status: {msg}")
                         return
                     if dev_id in self.devices:
                         # Update device online status
