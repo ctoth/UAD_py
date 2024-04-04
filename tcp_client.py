@@ -98,6 +98,14 @@ class TCPClient:
         """
         self.tasks.remove(task)
 
+    def start_task(self, coro):
+        """
+        Start an asyncio task, add a done callback, and track it in self.tasks.
+        """
+        task = asyncio.create_task(coro)
+        task.add_done_callback(self._task_done_callback)
+        self.tasks.append(task)
+
     async def start(self):
         try:
             self.reader, self.writer = await asyncio.open_connection(self.host, self.port)
@@ -106,24 +114,15 @@ class TCPClient:
             self.connection_signal.send(connected=True)
             logger.info("Connected to TCP")
             await self.send_get_devices()
-            self.tasks.append(asyncio.create_task(self.poll_for_response()))
-            self.tasks.append(asyncio.create_task(self.start_keep_alive()))
+            self.start_task(self.poll_for_response())
+            self.start_task(self.start_keep_alive())
         except Exception as e:
             logger.error(f"Connection error: {e}")
             async with self.connection_lock:
                 self.connected = False
             self.connection_signal.send(connected=False)
             await asyncio.sleep(self.RECONNECT_TIME)
-            self.tasks.append(asyncio.create_task(self.start()))
-
-    def create_task(self, coro):
-        """
-        Create an asyncio task and add it to the tasks list with a done callback.
-        """
-        task = asyncio.create_task(coro)
-        task.add_done_callback(self._task_done_callback)
-        self.tasks.append(task)
-        return task
+            self.start_task(self.start())
 
     async def send_message(self, msg):
         async with self.connection_lock:
@@ -140,7 +139,7 @@ class TCPClient:
             async with self.connection_lock:
                 self.connected = False
             self.connection_signal.send(connected=False)
-            asyncio.create_task(self.start())
+            self.start_task(self.start())
 
     async def poll_for_response(self):
         while True:
@@ -171,7 +170,7 @@ class TCPClient:
     async def close(self):
         if self.writer:
             self.writer.close()
-            asyncio.create_task(self.writer.wait_closed())
+            self.start_task(self.writer.wait_closed())
         async with self.connection_lock:
             self.connected = False
         self.connection_signal.send(connected=False)
@@ -352,7 +351,7 @@ class TCPClient:
                     dev_id = json_path[1]
                     if len(json_path) == 3:
                         # -> /devices/id/inputs
-                        children_keys = self.get_json_children(msg) or []
+                        children_keys = self.get_json_children(message_data) or []
                         for input_id in children_keys:
                             await self.send_get_input(dev_id, input_id)
                     elif len(json_path) == 4:
