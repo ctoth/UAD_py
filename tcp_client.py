@@ -6,6 +6,7 @@ from blinker import signal
 
 logger = logging.getLogger(__name__)
 
+
 @attr.s(auto_attribs=True)
 class Input:
     input_id: str = attr.ib()
@@ -44,7 +45,6 @@ class Input:
         self.device.client.start_task(self.device.client.send_bool_preamp_message(
             self.device.device_id, self.input_id, "LowCut", low_cut))
         self.low_cut = low_cut
-
 
 
 @attr.s(auto_attribs=True)
@@ -126,19 +126,20 @@ class Device:
 
 @attr.s(auto_attribs=True)
 class TCPClient:
+    host: str = attr.ib()
+    port: int = attr.ib()
     RECONNECT_TIME: int = 3
     KEEP_ALIVE_TIME: int = 3
     SLEEP_TIME: int = 3
     USLEEP_TIME: float = 0.01
     MSG_SEPARATOR: str = '\x00'
-    host: str = attr.ib()
-    port: int = attr.ib()
     connected: bool = False
     approved: bool = None
     reader: asyncio.StreamReader = None
     writer: asyncio.StreamWriter = None
     devices: dict = attr.Factory(dict)
-    connection_signal: signal = attr.Factory(lambda: signal('connection_change'))
+    connection_signal: signal = attr.Factory(
+        lambda: signal('connection_change'))
     connection_lock: asyncio.Lock = attr.Factory(asyncio.Lock)
     tasks: list = attr.Factory(list)
 
@@ -270,6 +271,7 @@ class TCPClient:
             properties = message_data['data']
             self.devices[dev_id].update_input(input_id, properties)
     # Helper method to extract children keys from message data
+
     def get_json_children(self, message_data):
         try:
             data = json.loads(message_data)
