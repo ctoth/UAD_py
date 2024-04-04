@@ -4,6 +4,26 @@ import logging
 from blinker import signal
 
 logger = logging.getLogger(__name__)
+class Device:
+    def __init__(self, device_id):
+        self.device_id = device_id
+        self.online = False
+        self.properties = {}
+        self.inputs = {}
+
+    def set_online(self, online):
+        self.online = online
+
+    def update_properties(self, properties):
+        self.properties.update(properties)
+
+    def update_input(self, input_id, input_properties):
+        self.inputs[input_id] = input_properties
+
+    def get_input(self, input_id):
+        return self.inputs.get(input_id, None)
+
+    # Additional methods to manage device state can be added here
 
 class TCPClient:
     RECONNECT_TIME = 3
@@ -179,6 +199,17 @@ if __name__ == "__main__":
         except json.JSONDecodeError as e:
             logger.error(f"JSON parse error: {e}")
             return False
+    def __init__(self, host, port):
+        self.host = host
+        self.port = port
+        self.connected = False
+        self.approved = None
+        self.reader = None
+        self.writer = None
+        self.devices = {}  # Track devices by their IDs
+        self.connection_signal = signal('connection_change')
+
+    # ... existing methods ...
 
     async def handle_message(self, msg):
         try:
@@ -191,6 +222,11 @@ if __name__ == "__main__":
                     pass
                 elif len(json_path) == 2:
                     # -> /devices/id
+                    dev_id = json_path[1]
+                    self.devices[dev_id] = Device(dev_id)  # Create a new Device instance
+                    children_keys = self.get_json_children(msg)
+                    for child_id in children_keys:
+                        await self.send_get_device(child_id)
                     children_keys = self.get_json_children(msg)
                     for dev_id in children_keys:
                         await self.send_get_device(dev_id)
@@ -198,6 +234,8 @@ if __name__ == "__main__":
                     # -> /devices/id/DeviceOnline
                     dev_id = json_path[1]
                     online = self.get_data_as_bool(msg)
+                    if dev_id in self.devices:
+                        self.devices[dev_id].set_online(online)  # Update device online status
                     # Signal device online status change
                     self.connection_signal.send(device_id=dev_id, online=online)
                 elif json_path[2] == 'inputs':
@@ -210,9 +248,13 @@ if __name__ == "__main__":
                     elif len(json_path) == 4:
                         # -> /devices/id/inputs/id
                         input_id = json_path[3]
+                        if dev_id in self.devices:
+                            input_data = message_data['data']
+                            self.devices[dev_id].update_input(input_id, input_data)  # Update input properties
                         # Signal input information received
                         self.connection_signal.send(device_id=dev_id, input_id=input_id, input_data=message_data)
         except json.JSONDecodeError as e:
             logger.error(f"JSON parse error: {e}")
 
+    # ... rest of the TCPClient class ...
     # The rest of the methods from the Swift code will be implemented here
