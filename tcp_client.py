@@ -4,6 +4,8 @@ import logging
 from blinker import signal
 
 logger = logging.getLogger(__name__)
+
+
 class Device:
     def __init__(self, device_id):
         self.device_id = device_id
@@ -23,7 +25,6 @@ class Device:
     def get_input(self, input_id):
         return self.inputs.get(input_id, None)
 
-    # Additional methods to manage device state can be added here
 
 class TCPClient:
     RECONNECT_TIME = 3
@@ -39,7 +40,9 @@ class TCPClient:
         self.approved = None
         self.reader = None
         self.writer = None
+        self.devices = {}  # Track devices by their IDs
         self.connection_signal = signal('connection_change')
+
 
     async def start(self):
         try:
@@ -62,9 +65,10 @@ class TCPClient:
             logger.error("Not connected to server.")
             return
         tcp_message = f"{msg}{self.MSG_SEPARATOR}"
-        self.writer.write(tcp_message.encode('utf-8'))
-        await self.writer.drain()
-        logger.debug(f"Sent: {tcp_message}")
+        try:
+            self.writer.write(tcp_message.encode('utf-8'))
+            await self.writer.drain()
+            logger.debug(f"Sent: {tcp_message}")
         except Exception as e:
             logger.error(f"Failed to send message: {e}")
             self.connected = False
@@ -109,7 +113,8 @@ class TCPClient:
                     dev_id = json_path[1]
                     if dev_id not in self.devices:
                         self.devices[dev_id] = Device(dev_id)
-                    self.devices[dev_id].update_properties(message_data['data'])
+                    self.devices[dev_id].update_properties(
+                        message_data['data'])
                     await self.send_get_inputs(dev_id)
                 elif json_path[2] == 'DeviceOnline':
                     # -> /devices/id/DeviceOnline
@@ -122,7 +127,8 @@ class TCPClient:
                     dev_id = json_path[1]
                     input_id = json_path[3]
                     if dev_id in self.devices:
-                        self.devices[dev_id].update_input(input_id, message_data['data'])
+                        self.devices[dev_id].update_input(
+                            input_id, message_data['data'])
         except json.JSONDecodeError as e:
             logger.error(f"JSON parse error: {e}")
 
@@ -151,12 +157,6 @@ class TCPClient:
         self.connected = False
         self.connection_signal.send(connected=False)
 
-    # Additional methods for sending specific messages will be added here
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
-    client = TCPClient('localhost', 12345)
-    asyncio.run(client.start())
     def get_tapered_level(self, value):
         tapered = value / 100
         tapered = 1 / 1.27 * tapered
@@ -221,10 +221,6 @@ if __name__ == "__main__":
     async def send_get_input(self, dev_id, input_id):
         await self.send_message(f"get /devices/{dev_id}/inputs/{input_id}")
         await self.send_message(f"get /devices/{dev_id}/inputs/{input_id}/sends")
-
-    # Removed unused convert_to_dictionary method.
-
-    # Removed unused get_json_children method.
 
     def get_data_as_bool(self, json_data):
         try:
@@ -239,17 +235,6 @@ if __name__ == "__main__":
         except json.JSONDecodeError as e:
             logger.error(f"JSON parse error: {e}")
             return False
-    def __init__(self, host, port):
-        self.host = host
-        self.port = port
-        self.connected = False
-        self.approved = None
-        self.reader = None
-        self.writer = None
-        self.devices = {}  # Track devices by their IDs
-        self.connection_signal = signal('connection_change')
-
-    # ... existing methods ...
 
     async def handle_message(self, msg):
         try:
@@ -263,7 +248,8 @@ if __name__ == "__main__":
                 elif len(json_path) == 2:
                     # -> /devices/id
                     dev_id = json_path[1]
-                    self.devices[dev_id] = Device(dev_id)  # Create a new Device instance
+                    # Create a new Device instance
+                    self.devices[dev_id] = Device(dev_id)
                     children_keys = self.get_json_children(msg)
                     for child_id in children_keys:
                         await self.send_get_device(child_id)
@@ -275,9 +261,11 @@ if __name__ == "__main__":
                     dev_id = json_path[1]
                     online = self.get_data_as_bool(msg)
                     if dev_id in self.devices:
-                        self.devices[dev_id].set_online(online)  # Update device online status
+                        # Update device online status
+                        self.devices[dev_id].set_online(online)
                     # Signal device online status change
-                    self.connection_signal.send(device_id=dev_id, online=online)
+                    self.connection_signal.send(
+                        device_id=dev_id, online=online)
                 elif json_path[2] == 'inputs':
                     dev_id = json_path[1]
                     if len(json_path) == 3:
@@ -290,14 +278,14 @@ if __name__ == "__main__":
                         input_id = json_path[3]
                         if dev_id in self.devices:
                             input_data = message_data['data']
-                            self.devices[dev_id].update_input(input_id, input_data)  # Update input properties
+                            self.devices[dev_id].update_input(
+                                input_id, input_data)  # Update input properties
                         # Signal input information received
-                        self.connection_signal.send(device_id=dev_id, input_id=input_id, input_data=message_data)
+                        self.connection_signal.send(
+                            device_id=dev_id, input_id=input_id, input_data=message_data)
         except json.JSONDecodeError as e:
             logger.error(f"JSON parse error: {e}")
 
-    # ... rest of the TCPClient class ...
-    # The rest of the methods from the Swift code will be implemented here
     def get_tapered_level(self, value):
         tapered = value / 100
         tapered = 1 / 1.27 * tapered
@@ -362,3 +350,9 @@ if __name__ == "__main__":
     async def send_get_input(self, dev_id, input_id):
         await self.send_message(f"get /devices/{dev_id}/inputs/{input_id}")
         await self.send_message(f"get /devices/{dev_id}/inputs/{input_id}/sends")
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
+    client = TCPClient('localhost', 12345)
+    asyncio.run(client.start())
