@@ -6,6 +6,46 @@ from blinker import signal
 
 logger = logging.getLogger(__name__)
 
+@attr.s(auto_attribs=True)
+class Input:
+    input_id: str = attr.ib()
+    device: 'Device' = attr.ib()
+    properties: dict = attr.Factory(dict)
+    gain: float = 0.0
+    phantom_power: bool = False
+    pad: bool = False
+    phase: bool = False
+    low_cut: bool = False
+
+    def update_properties(self, properties):
+        self.properties.update(properties)
+
+    def set_gain(self, gain):
+        self.device.client.start_task(
+            self.device.client.send_gain_preamp_message(self.device.device_id, self.input_id, gain))
+        self.gain = gain
+
+    def set_phantom_power(self, phantom_power):
+        self.device.client.start_task(self.device.client.send_bool_preamp_message(
+            self.device.device_id, self.input_id, "48V", phantom_power))
+        self.phantom_power = phantom_power
+
+    def set_pad(self, pad):
+        self.device.client.start_task(
+            self.device.client.send_bool_preamp_message(self.device.device_id, self.input_id, "Pad", pad))
+        self.pad = pad
+
+    def set_phase(self, phase):
+        self.device.client.start_task(self.device.client.send_bool_preamp_message(
+            self.device.device_id, self.input_id, "Phase", phase))
+        self.phase = phase
+
+    def set_low_cut(self, low_cut):
+        self.device.client.start_task(self.device.client.send_bool_preamp_message(
+            self.device.device_id, self.input_id, "LowCut", low_cut))
+        self.low_cut = low_cut
+
+
 
 @attr.s(auto_attribs=True)
 class Device:
