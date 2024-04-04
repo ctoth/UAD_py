@@ -1,4 +1,5 @@
 import asyncio
+import attr
 import json
 import logging
 from blinker import signal
@@ -6,22 +7,22 @@ from blinker import signal
 logger = logging.getLogger(__name__)
 
 
+@attr.s(auto_attribs=True)
 class Device:
-    def __init__(self, device_id, client):
-        self.device_id = device_id
-        self.client = client
-        self.online = False
-        self.properties = {}
-        self.inputs = {}
-        self.volume = None
-        self.mute = False
-        self.solo = False
-        self.pan = 0.0
-        self.gain = 0.0
-        self.phantom_power = False
-        self.pad = False
-        self.phase = False
-        self.low_cut = False
+    device_id: str = attr.ib()
+    client: 'TCPClient' = attr.ib()
+    online: bool = False
+    properties: dict = attr.Factory(dict)
+    inputs: dict = attr.Factory(dict)
+    volume: float = None
+    mute: bool = False
+    solo: bool = False
+    pan: float = 0.0
+    gain: float = 0.0
+    phantom_power: bool = False
+    pad: bool = False
+    phase: bool = False
+    low_cut: bool = False
 
     def set_online(self, online):
         self.online = online
@@ -81,25 +82,23 @@ class Device:
         self.low_cut = low_cut
 
 
+@attr.s(auto_attribs=True)
 class TCPClient:
-    RECONNECT_TIME = 3
-    KEEP_ALIVE_TIME = 3
-    SLEEP_TIME = 3
-    USLEEP_TIME = 0.01
-    MSG_SEPARATOR = '\x00'
-
-    def __init__(self, host, port):
-        self.host = host
-        self.port = port
-        self.connected = False
-        self.approved = None
-        self.reader = None
-        self.writer = None
-        self.devices = {}  # Track devices by their IDs, passing self as client
-        self.connection_signal = signal('connection_change')
-        # Lock for thread-safe operations on `self.connected`
-        self.connection_lock = asyncio.Lock()
-        self.tasks = []  # List to keep track of tasks
+    RECONNECT_TIME: int = 3
+    KEEP_ALIVE_TIME: int = 3
+    SLEEP_TIME: int = 3
+    USLEEP_TIME: float = 0.01
+    MSG_SEPARATOR: str = '\x00'
+    host: str = attr.ib()
+    port: int = attr.ib()
+    connected: bool = False
+    approved: bool = None
+    reader: asyncio.StreamReader = None
+    writer: asyncio.StreamWriter = None
+    devices: dict = attr.Factory(dict)
+    connection_signal: signal = attr.Factory(lambda: signal('connection_change'))
+    connection_lock: asyncio.Lock = attr.Factory(asyncio.Lock)
+    tasks: list = attr.Factory(list)
 
     def _task_done_callback(self, task):
         """
