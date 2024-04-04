@@ -113,7 +113,7 @@ class TCPClient:
             json_path = message_data['path'].split('/')
 
             if json_path[0] == 'devices':
-                if len(json_path) == 1:
+                if len(json_path) == 1:  # -> /devices
                     # -> /devices
                     # Handle the list of devices
                     children_keys = message_data['data']['children'].keys()
@@ -122,7 +122,7 @@ class TCPClient:
                 elif len(json_path) == 2:
                     # -> /devices/id
                     dev_id = json_path[1]
-                    if dev_id not in self.devices:
+                    if dev_id not in self.devices:  # Create a new Device instance
                         self.devices[dev_id] = Device(dev_id)
                     self.devices[dev_id].update_properties(
                         message_data['data'])
@@ -130,20 +130,20 @@ class TCPClient:
                 elif json_path[2] == 'DeviceOnline':
                     # -> /devices/id/DeviceOnline
                     dev_id = json_path[1]
-                    online = message_data['data']
+                    online = message_data['data']  # Update device online status
                     if dev_id in self.devices:
                         self.devices[dev_id].set_online(online)
                 elif json_path[2] == 'inputs' and len(json_path) == 4:
                     # -> /devices/id/inputs/id
                     dev_id = json_path[1]
-                    input_id = json_path[3]
+                    input_id = json_path[3]  # Update input properties
                     if dev_id in self.devices:
                         self.devices[dev_id].update_input(
                             input_id, message_data['data'])
         except json.JSONDecodeError as e:
             logger.error(f"JSON parse error: {e}")
 
-    # Helper method to extract children keys from message data
+    # Helper method to extract children keys from message data 
     def get_json_children(self, message_data):
         try:
             data = json.loads(message_data)
@@ -169,7 +169,7 @@ class TCPClient:
         self.connection_signal.send(connected=False)
         for task in self.tasks:
             task.cancel()
-        self.tasks.clear()
+        self.tasks.clear() 
 
     def get_tapered_level(self, value):
         tapered = value / 100
@@ -256,7 +256,7 @@ class TCPClient:
             json_path = message_data['path'].split('/')
 
             if json_path[0] == 'devices':
-                if len(json_path) == 1:
+                if len(json_path) == 1:  # -> /devices
                     # -> /devices
                     pass
                 elif len(json_path) == 2:
