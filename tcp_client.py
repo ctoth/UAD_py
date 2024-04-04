@@ -54,11 +54,30 @@ class TCPClient:
         self.devices = {}  # Track devices by their IDs
         self.connection_signal = signal('connection_change')
 
+class TCPClient:
+    RECONNECT_TIME = 3
+    KEEP_ALIVE_TIME = 3
+    SLEEP_TIME = 3
+    USLEEP_TIME = 0.01
+    MSG_SEPARATOR = '\x00'
+
+    def __init__(self, host, port):
+        self.host = host
+        self.port = port
+        self.connected = False
+        self.approved = None
+        self.reader = None
+        self.writer = None
+        self.devices = {}  # Track devices by their IDs
+        self.connection_signal = signal('connection_change')
+        self.connection_lock = asyncio.Lock()  # Lock for thread-safe operations on `self.connected`
+        self.tasks = []  # List to keep track of tasks
 
     async def start(self):
         try:
             self.reader, self.writer = await asyncio.open_connection(self.host, self.port)
-            self.connected = True
+            async with self.connection_lock:
+                self.connected = True
             self.connection_signal.send(connected=True)
             logger.info("Connected to TCP")
             await self.send_get_devices()
@@ -66,13 +85,17 @@ class TCPClient:
             self.tasks.append(asyncio.create_task(self.start_keep_alive()))
         except Exception as e:
             logger.error(f"Connection error: {e}")
-            self.connected = False
+            async with self.connection_lock:
+                self.connected = False
             self.connection_signal.send(connected=False)
             await asyncio.sleep(self.RECONNECT_TIME)
             self.tasks.append(asyncio.create_task(self.start()))
 
     async def send_message(self, msg):
-        if not self.connected:
+        async with self.connection_lock:
+            if not self.connected:
+                logger.error("Not connected to server.")
+                return
             logger.error("Not connected to server.")
             return
         tcp_message = f"{msg}{self.MSG_SEPARATOR}"
@@ -82,19 +105,24 @@ class TCPClient:
             logger.debug(f"Sent: {tcp_message}")
         except Exception as e:
             logger.error(f"Failed to send message: {e}")
-            self.connected = False
+            async with self.connection_lock:
+                self.connected = False
             self.connection_signal.send(connected=False)
             asyncio.create_task(self.start())
 
     async def poll_for_response(self):
-        while self.connected:
+        while True:
+            async with self.connection_lock:
+                if not self.connected:
+                    break
             try:
                 response = await self.reader.readuntil(separator=self.MSG_SEPARATOR.encode('utf-8'))
                 message = response.decode('utf-8').rstrip(self.MSG_SEPARATOR)
                 asyncio.create_task(self.handle_message(message))
             except asyncio.IncompleteReadError:
                 logger.info("Server closed the connection.")
-                self.connected = False
+                async with self.connection_lock:
+                    self.connected = False
                 self.connection_signal.send(connected=False)
                 break
             except asyncio.CancelledError:
@@ -102,11 +130,22 @@ class TCPClient:
                 break
             except Exception as e:
                 logger.error(f"Error while reading from server: {e}")
-                self.connected = False
+                async with self.connection_lock:
+                    self.connected = False
                 self.connection_signal.send(connected=False)
                 break
             await asyncio.sleep(self.SLEEP_TIME)
 
+    def close(self):
+        if self.writer:
+            self.writer.close()
+            asyncio.create_task(self.writer.wait_closed())
+        async with self.connection_lock:
+            self.connected = False
+        self.connection_signal.send(connected=False)
+        for task in self.tasks:
+            task.cancel()
+        self.tasks.clear()
     async def handle_message(self, msg):
         try:
             message_data = json.loads(msg)
