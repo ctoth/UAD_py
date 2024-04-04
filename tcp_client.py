@@ -42,6 +42,17 @@ class TCPClient:
         self.writer = None
         self.devices = {}  # Track devices by their IDs
         self.connection_signal = signal('connection_change')
+        self.tasks = []  # List to keep track of tasks
+
+    def __init__(self, host, port):
+        self.host = host
+        self.port = port
+        self.connected = False
+        self.approved = None
+        self.reader = None
+        self.writer = None
+        self.devices = {}  # Track devices by their IDs
+        self.connection_signal = signal('connection_change')
 
 
     async def start(self):
@@ -51,14 +62,14 @@ class TCPClient:
             self.connection_signal.send(connected=True)
             logger.info("Connected to TCP")
             await self.send_get_devices()
-            asyncio.create_task(self.poll_for_response())
-            asyncio.create_task(self.start_keep_alive())
+            self.tasks.append(asyncio.create_task(self.poll_for_response()))
+            self.tasks.append(asyncio.create_task(self.start_keep_alive()))
         except Exception as e:
             logger.error(f"Connection error: {e}")
             self.connected = False
             self.connection_signal.send(connected=False)
             await asyncio.sleep(self.RECONNECT_TIME)
-            asyncio.create_task(self.start())
+            self.tasks.append(asyncio.create_task(self.start()))
 
     async def send_message(self, msg):
         if not self.connected:
@@ -156,6 +167,9 @@ class TCPClient:
             asyncio.create_task(self.writer.wait_closed())
         self.connected = False
         self.connection_signal.send(connected=False)
+        for task in self.tasks:
+            task.cancel()
+        self.tasks.clear()
 
     def get_tapered_level(self, value):
         tapered = value / 100
