@@ -92,9 +92,49 @@ class TCPClient:
                 break
             await asyncio.sleep(self.SLEEP_TIME)
 
-    # The handle_message method should be updated to match the Swift client's handleMessage method.
-    # This includes parsing the message and handling different paths and data extraction.
-    # Please refer to the Swift code for the exact implementation details.
+    async def handle_message(self, msg):
+        try:
+            message_data = json.loads(msg)
+            json_path = message_data['path'].split('/')
+
+            if json_path[0] == 'devices':
+                if len(json_path) == 1:
+                    # -> /devices
+                    # Handle the list of devices
+                    children_keys = message_data['data']['children'].keys()
+                    for dev_id in children_keys:
+                        await self.send_get_device(dev_id)
+                elif len(json_path) == 2:
+                    # -> /devices/id
+                    dev_id = json_path[1]
+                    if dev_id not in self.devices:
+                        self.devices[dev_id] = Device(dev_id)
+                    self.devices[dev_id].update_properties(message_data['data'])
+                    await self.send_get_inputs(dev_id)
+                elif json_path[2] == 'DeviceOnline':
+                    # -> /devices/id/DeviceOnline
+                    dev_id = json_path[1]
+                    online = message_data['data']
+                    if dev_id in self.devices:
+                        self.devices[dev_id].set_online(online)
+                elif json_path[2] == 'inputs' and len(json_path) == 4:
+                    # -> /devices/id/inputs/id
+                    dev_id = json_path[1]
+                    input_id = json_path[3]
+                    if dev_id in self.devices:
+                        self.devices[dev_id].update_input(input_id, message_data['data'])
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON parse error: {e}")
+
+    # Helper method to extract children keys from message data
+    def get_json_children(self, message_data):
+        try:
+            data = json.loads(message_data)
+            children = data.get('data', {}).get('children', {})
+            return list(children.keys())
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON parse error: {e}")
+            return []
 
     async def start_keep_alive(self):
         while self.connected:
