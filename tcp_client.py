@@ -53,7 +53,7 @@ class Device:
     client: 'TCPClient' = attr.ib()
     online: bool = False
     properties: dict = attr.Factory(dict)
-    inputs: dict = attr.Factory(dict)
+    inputs: dict[str, Input] = attr.Factory(dict)
     volume: float = None
     mute: bool = False
     solo: bool = False
@@ -70,11 +70,13 @@ class Device:
     def update_properties(self, properties):
         self.properties.update(properties)
 
-    def update_input(self, input_id, input_properties):
-        self.inputs[input_id] = input_properties
+    def update_input(self, input_id, properties):
+        if input_id not in self.inputs:
+            self.inputs[input_id] = Input(input_id=input_id, device=self)
+        self.inputs[input_id].update_properties(properties)
 
     def get_input(self, input_id):
-        return self.inputs.get(input_id, None)
+        return self.inputs.get(input_id)
 
     def set_volume(self, volume):
         self.client.start_task(
@@ -265,7 +267,8 @@ class TCPClient:
     async def handle_device_input(self, message_data, dev_id, input_id):
         # Handle input properties
         if dev_id in self.devices:
-            self.devices[dev_id].update_input(input_id, message_data['data'])
+            properties = message_data['data']
+            self.devices[dev_id].update_input(input_id, properties)
     # Helper method to extract children keys from message data
     def get_json_children(self, message_data):
         try:
