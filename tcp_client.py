@@ -7,8 +7,9 @@ logger = logging.getLogger(__name__)
 
 
 class Device:
-    def __init__(self, device_id):
+    def __init__(self, device_id, client):
         self.device_id = device_id
+        self.client = client
         self.online = False
         self.properties = {}
         self.inputs = {}
@@ -35,30 +36,39 @@ class Device:
         return self.inputs.get(input_id, None)
 
     def set_volume(self, volume):
+        asyncio.create_task(self.client.send_volume_message(self.device_id, volume))
         self.volume = volume
 
     def set_mute(self, mute):
+        asyncio.create_task(self.client.send_bool_message(self.device_id, "Mute", mute))
         self.mute = mute
 
     def set_solo(self, solo):
+        asyncio.create_task(self.client.send_bool_message(self.device_id, "Solo", solo))
         self.solo = solo
 
     def set_pan(self, pan):
+        asyncio.create_task(self.client.send_float_message(self.device_id, "Pan", pan))
         self.pan = pan
 
     def set_gain(self, gain):
+        asyncio.create_task(self.client.send_gain_preamp_message(self.device_id, gain))
         self.gain = gain
 
     def set_phantom_power(self, phantom_power):
+        asyncio.create_task(self.client.send_bool_preamp_message(self.device_id, "48V", phantom_power))
         self.phantom_power = phantom_power
 
     def set_pad(self, pad):
+        asyncio.create_task(self.client.send_bool_preamp_message(self.device_id, "Pad", pad))
         self.pad = pad
 
     def set_phase(self, phase):
+        asyncio.create_task(self.client.send_bool_preamp_message(self.device_id, "Phase", phase))
         self.phase = phase
 
     def set_low_cut(self, low_cut):
+        asyncio.create_task(self.client.send_bool_preamp_message(self.device_id, "LowCut", low_cut))
         self.low_cut = low_cut
 
 
@@ -76,7 +86,7 @@ class TCPClient:
         self.approved = None
         self.reader = None
         self.writer = None
-        self.devices = {}  # Track devices by their IDs
+        self.devices = {}  # Track devices by their IDs, passing self as client
         self.connection_signal = signal('connection_change')
         # Lock for thread-safe operations on `self.connected`
         self.connection_lock = asyncio.Lock()
@@ -319,8 +329,8 @@ class TCPClient:
                 elif len(json_path) == 2:
                     # -> /devices/id
                     dev_id = json_path[1]
-                    if dev_id not in self.devices:  # Create a new Device instance if it doesn't exist
-                        self.devices[dev_id] = Device(dev_id)
+                    if dev_id not in self.devices:  # Create a new Device instance if it doesn't exist, passing self as client
+                        self.devices[dev_id] = Device(dev_id, self)
                     # Update device properties
                     self.devices[dev_id].update_properties(message_data['data'])
                     await self.send_get_inputs(dev_id)
