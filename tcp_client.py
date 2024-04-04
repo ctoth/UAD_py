@@ -12,6 +12,15 @@ class Device:
         self.online = False
         self.properties = {}
         self.inputs = {}
+        self.volume = None
+        self.mute = False
+        self.solo = False
+        self.pan = 0.0
+        self.gain = 0.0
+        self.phantom_power = False
+        self.pad = False
+        self.phase = False
+        self.low_cut = False
 
     def set_online(self, online):
         self.online = online
@@ -24,6 +33,33 @@ class Device:
 
     def get_input(self, input_id):
         return self.inputs.get(input_id, None)
+
+    def set_volume(self, volume):
+        self.volume = volume
+
+    def set_mute(self, mute):
+        self.mute = mute
+
+    def set_solo(self, solo):
+        self.solo = solo
+
+    def set_pan(self, pan):
+        self.pan = pan
+
+    def set_gain(self, gain):
+        self.gain = gain
+
+    def set_phantom_power(self, phantom_power):
+        self.phantom_power = phantom_power
+
+    def set_pad(self, pad):
+        self.pad = pad
+
+    def set_phase(self, phase):
+        self.phase = phase
+
+    def set_low_cut(self, low_cut):
+        self.low_cut = low_cut
 
 
 class TCPClient:
