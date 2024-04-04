@@ -36,39 +36,39 @@ class Device:
         return self.inputs.get(input_id, None)
 
     def set_volume(self, volume):
-        asyncio.create_task(self.client.send_volume_message(self.device_id, volume))
+        self.client.start_task(self.client.send_volume_message(self.device_id, volume))
         self.volume = volume
 
     def set_mute(self, mute):
-        asyncio.create_task(self.client.send_bool_message(self.device_id, "Mute", mute))
+        self.client.start_task(self.client.send_bool_message(self.device_id, "Mute", mute))
         self.mute = mute
 
     def set_solo(self, solo):
-        asyncio.create_task(self.client.send_bool_message(self.device_id, "Solo", solo))
+        self.client.start_task(self.client.send_bool_message(self.device_id, "Solo", solo))
         self.solo = solo
 
     def set_pan(self, pan):
-        asyncio.create_task(self.client.send_float_message(self.device_id, "Pan", pan))
+        self.client.start_task(self.client.send_float_message(self.device_id, "Pan", pan))
         self.pan = pan
 
     def set_gain(self, gain):
-        asyncio.create_task(self.client.send_gain_preamp_message(self.device_id, gain))
+        self.client.start_task(self.client.send_gain_preamp_message(self.device_id, gain))
         self.gain = gain
 
     def set_phantom_power(self, phantom_power):
-        asyncio.create_task(self.client.send_bool_preamp_message(self.device_id, "48V", phantom_power))
+        self.client.start_task(self.client.send_bool_preamp_message(self.device_id, "48V", phantom_power))
         self.phantom_power = phantom_power
 
     def set_pad(self, pad):
-        asyncio.create_task(self.client.send_bool_preamp_message(self.device_id, "Pad", pad))
+        self.client.start_task(self.client.send_bool_preamp_message(self.device_id, "Pad", pad))
         self.pad = pad
 
     def set_phase(self, phase):
-        asyncio.create_task(self.client.send_bool_preamp_message(self.device_id, "Phase", phase))
+        self.client.start_task(self.client.send_bool_preamp_message(self.device_id, "Phase", phase))
         self.phase = phase
 
     def set_low_cut(self, low_cut):
-        asyncio.create_task(self.client.send_bool_preamp_message(self.device_id, "LowCut", low_cut))
+        self.client.start_task(self.client.send_bool_preamp_message(self.device_id, "LowCut", low_cut))
         self.low_cut = low_cut
 
 
